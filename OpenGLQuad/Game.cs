@@ -6,6 +6,28 @@ using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
 // ReSharper disable CommentTypo
+/*
+    Left From Center X (- Value): ⬅
+    Right From Center X (- Value): ➡
+    Up From Center Y (+ Value): ⬆
+    Up From Center Y (+ Value): ⬇
+
+    Indice 0 (-0.5, 0.5)         Indice 2 (0.5, 0.5)
+                   \             /
+                    \           /
+                     |--------/|
+                     |       / |
+                     |      /  |
+                     |     /   |
+                     |    *----|-------Center (0, 0)
+                     |   /     |
+                     |  /      |
+                     | /       |
+                     |/________|
+                    /           \
+                   /             \
+    Indice 1 (-0.5, -0.5)         Indice 3 (0.5, -0.5)
+ */
 
 namespace OpenGLQuad
 {
@@ -16,52 +38,7 @@ namespace OpenGLQuad
         private static DebugProc? _debugCallback;
         private readonly IWindow _glWindow;
         private ShaderProgram? _shader;
-
-        // All of the vertices required to render a quad
-        // 2 of the vertices are reused from the 2 triangles.  That is why
-        // there is only 4 instead of 6
-        private readonly float[] _vertices =
-        {
-            -0.5f,  0.5f, 0.0f, // Top Left Vert | Top Left Triangle
-            -0.5f, -0.5f, 0.0f, // Bottom Left Vert | Top Left Triangle & Bottom Right Triangle
-             0.5f,  0.5f, 0.0f, // Top Right Vert | Top Left Triangle & Bottom Right Triangle
-             0.5f, -0.5f, 0.0f, // Bottom Right Vert | Bottom Right Triangle
-        };
-
-        // The references to the index locations in the _vertices array above
-        private readonly uint[] _indices =
-        {
-            0u, 1u, 2u, // Top Left Triangle
-            2u, 1u, 3u  // Bottom Left Triangle
-        };
-
-        /*
-            Left From Center X (- Value): ⬅
-            Right From Center X (- Value): ➡
-            Up From Center Y (+ Value): ⬆
-            Up From Center Y (+ Value): ⬇
-
-            Indice 0 (-0.5, 0.5)         Indice 2 (0.5, 0.5)
-                           \             /
-                            \           /
-                             |--------/|
-                             |       / |
-                             |      /  |
-                             |     /   |
-                             |    *----|-------Center (0, 0)
-                             |   /     |
-                             |  /      |
-                             | /       |
-                             |/________|
-                            /           \
-                           /             \
-            Indice 1 (-0.5, -0.5)         Indice 3 (0.5, -0.5)
-         */
-
-        private uint _vao; // Vertex Array Object
-        private uint _vbo; // Vertex Buffer Object
-        private uint _ebo; // Element Buffer Object
-        private readonly Glfw _glfw;
+        private Quad _quad;
 
         /// <summary>
         /// Creates a new instance of <see cref="Game"/>.
@@ -82,6 +59,7 @@ namespace OpenGLQuad
             _glWindow = Window.Create(options);
 
             _glWindow.Load += OnLoad;
+            _glWindow.Update += OnUpdate;
             _glWindow.Render += OnRender;
             _glWindow.Closing += OnClose;
             _glWindow.Title = "Simple Quad";
@@ -98,40 +76,12 @@ namespace OpenGLQuad
             SetupErrorCallback();
 
             _shader = new ShaderProgram(GL, "shader", "shader");
+            _quad = new Quad(GL, _shader);
+        }
 
-            // Generate the VAO and VBO with only 1 object each
-            GL?.GenVertexArrays(1, out _vao);
-            GL?.GenBuffers(1, out _vbo);
-            GL?.GenBuffers(1, out _ebo);
-
-            // Make the VAO the current Vertex Array Object by binding it
-            GL?.BindVertexArray(_vao);
-
-            // Bind the VBO specifying it's a GL_ARRAY_BUFFER
-            var vertData = new ReadOnlySpan<float>(_vertices);
-            GL?.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
-            GL?.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(sizeof(float) * _vertices.Length), vertData, BufferUsageARB.StaticDraw);
-
-            // Bind and upload the indices data
-            var indicesData = new ReadOnlySpan<uint>(_indices);
-            GL?.BindBuffer(BufferTargetARB.ElementArrayBuffer, _ebo);
-            GL?.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(sizeof(uint) * _indices.Length), indicesData, BufferUsageARB.StaticDraw);
-
-            // Configure the Vertex Attribute so that OpenGL knows how to read the VBO
-            GL?.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
-
-            // Enable the Vertex Attribute so that OpenGL knows to use it
-            GL?.EnableVertexAttribArray(0);
-
-            // Bind both the VBO and VAO to 0 so that we don't accidentally modify the VAO and VBO we created
-            GL?.BindBuffer(BufferTargetARB.ArrayBuffer, 0); // Unbind the VBO
-            GL?.BindVertexArray(0); // Unbind the VAO
-
-            // Unbind the EBO
-            // NOTE: Make sure to unbind AFTER you unbind the VAO.  This is because the EBO is stored
-            // inside of the VAO.  Unbinding the EBO before unbinding, (or without unbinding the VAO),
-            // you are telling OpenGL that you don't want your VAO to use the EBO.
-            GL?.BindBuffer(BufferTargetARB.ElementArrayBuffer, 0);
+        private void OnUpdate(double obj)
+        {
+            _quad.UpdateData();
         }
 
         private void OnRender(double obj)
@@ -142,17 +92,7 @@ namespace OpenGLQuad
             // Clean the back buffer and assign the new color to it
             GL?.Clear(ClearBufferMask.ColorBufferBit);
 
-            // Tell OpenGL which Shader Program we want to use
-            _shader?.Use();
-
-            // Bind the VAO so OpenGL knows to use it
-            GL?.BindVertexArray(_vao);
-
-            unsafe
-            {
-                // Draw the triangle using the GL_TRIANGLES primitive
-                GL?.DrawElements(PrimitiveType.Triangles, (uint)_indices.Length, DrawElementsType.UnsignedInt, (void*)0);
-            }
+            _quad.Render();
 
             // Swap the back buffer with the front buffer
             _glWindow.SwapBuffers();
@@ -160,9 +100,7 @@ namespace OpenGLQuad
 
         private void OnClose()
         {
-            GL?.DeleteVertexArray(_vao);
-            GL?.DeleteBuffer(_vbo);
-            GL?.DeleteBuffer(_ebo);
+            _quad.Dispose();
             _shader?.Dispose();
         }
 
@@ -206,9 +144,9 @@ namespace OpenGLQuad
             errorMessage += $"\n\tLength: {length}";
             errorMessage += $"\n\tUser Param: {Marshal.PtrToStringAnsi(userParam)}";
 
-                throw new Exception(errorMessage);
             if (severity != GLEnum.DebugSeverityNotification)
             {
+                throw new Exception(errorMessage);
             }
         }
     }
