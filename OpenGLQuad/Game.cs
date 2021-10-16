@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Buffers;
+using System.Drawing;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using Silk.NET.GLFW;
 using Silk.NET.Maths;
@@ -38,7 +40,8 @@ namespace OpenGLQuad
         private static DebugProc? _debugCallback;
         private readonly IWindow _glWindow;
         private ShaderProgram? _shader;
-        private Quad _quad;
+        private Quad _quadA;
+        private Quad _quadB;
 
         /// <summary>
         /// Creates a new instance of <see cref="Game"/>.
@@ -76,12 +79,23 @@ namespace OpenGLQuad
             SetupErrorCallback();
 
             _shader = new ShaderProgram(GL, "shader", "shader");
-            _quad = new Quad(GL, _shader);
+
+            _quadA = new Quad(GL, _shader);
+            _quadA.Position = new Vector2(200, 200);
+            _quadA.Width = 100;
+            _quadA.Height = 100;
+            _quadA.Color = Color.Goldenrod;
+
+            _quadB = new Quad(GL, _shader);
+            _quadB.Position = new Vector2(265, 250);
+            _quadB.Width = 40;
+            _quadB.Height = 75;
+            _quadB.Color = Color.CornflowerBlue;
         }
 
         private void OnUpdate(double obj)
         {
-            _quad.UpdateData();
+
         }
 
         private void OnRender(double obj)
@@ -92,7 +106,8 @@ namespace OpenGLQuad
             // Clean the back buffer and assign the new color to it
             GL?.Clear(ClearBufferMask.ColorBufferBit);
 
-            _quad.Render();
+            _quadA.Render();
+             _quadB.Render();
 
             // Swap the back buffer with the front buffer
             _glWindow.SwapBuffers();
@@ -100,7 +115,7 @@ namespace OpenGLQuad
 
         private void OnClose()
         {
-            _quad.Dispose();
+            _quadA.Dispose();
             _shader?.Dispose();
         }
 

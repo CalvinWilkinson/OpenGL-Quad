@@ -9,7 +9,6 @@ namespace OpenGLQuad
     public class ShaderProgram : IDisposable
     {
         private static readonly string BaseDirPath = @$"{Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)}\";
-        private readonly uint _programId;
         private readonly uint _vertexShaderId;
         private readonly uint _fragmentShaderId;
         private bool _isDisposed;
@@ -28,27 +27,29 @@ namespace OpenGLQuad
             _vertexShaderId = LoadVertShader(vertexShaderName);
             _fragmentShaderId = LoadFragShader(fragmentShaderName);
 
-            _programId = _gl.CreateProgram();
+            Id = _gl.CreateProgram();
 
-            _gl.AttachShader(_programId, _vertexShaderId);
-            _gl.AttachShader(_programId, _fragmentShaderId);
-            _gl.LinkProgram(_programId);
-            _gl.ValidateProgram(_programId);
+            _gl.AttachShader(Id, _vertexShaderId);
+            _gl.AttachShader(Id, _fragmentShaderId);
+            _gl.LinkProgram(Id);
+            _gl.ValidateProgram(Id);
 
             // Check for linking errors
-            _gl.GetProgram(_programId, ProgramPropertyARB.LinkStatus, out var progParams);
+            _gl.GetProgram(Id, ProgramPropertyARB.LinkStatus, out var progParams);
 
             if (progParams > 0) return;
 
             // We can use `this.gl.GetProgramInfoLog(program)` to get information about the error.
-            var programInfoLog = _gl.GetProgramInfoLog(_programId);
+            var programInfoLog = _gl.GetProgramInfoLog(Id);
 
-            throw new Exception($"Error occurred while linking program with ID '{_programId}'\n{programInfoLog}");
+            throw new Exception($"Error occurred while linking program with ID '{Id}'\n{programInfoLog}");
         }
+
+        public uint Id { get; }
 
         ~ShaderProgram() => Dispose();
 
-        public void Use() => _gl.UseProgram(_programId);
+        public void Use() => _gl.UseProgram(Id);
 
         public void StopUsing() => _gl.UseProgram(0);
 
@@ -108,11 +109,11 @@ namespace OpenGLQuad
             }
 
             StopUsing();
-            _gl.DetachShader(_programId, _vertexShaderId);
-            _gl.DetachShader(_programId, _fragmentShaderId);
+            _gl.DetachShader(Id, _vertexShaderId);
+            _gl.DetachShader(Id, _fragmentShaderId);
             _gl.DeleteShader(_vertexShaderId);
             _gl.DeleteShader(_fragmentShaderId);
-            _gl.DeleteProgram(_programId);
+            _gl.DeleteProgram(Id);
 
             _isDisposed = true;
 

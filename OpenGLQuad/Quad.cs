@@ -1,11 +1,16 @@
 ﻿using System;
+using System.Drawing;
+using System.Numerics;
 using Silk.NET.OpenGL;
 using Silk.NET.Vulkan;
+// ReSharper disable InconsistentNaming
 
 namespace OpenGLQuad
 {
     public class Quad : IDisposable
     {
+        private const int SCREEN_WIDTH = 800;
+        private const int SCREEN_HEIGHT = 600;
         private readonly GL _gl;
         private readonly ShaderProgram _shader;
         private uint _vao; // Vertex Array Object
@@ -29,6 +34,8 @@ namespace OpenGLQuad
             2u, 1u, 3u  // Bottom Left Triangle
         };
 
+        private int _colorLocation;
+
         public Quad(GL gl, ShaderProgram shader)
         {
             _gl = gl;
@@ -41,6 +48,80 @@ namespace OpenGLQuad
 
             SetupData();
         }
+
+        public Vector2 Position
+        {
+            get
+            {
+                var ndcWidth = NDCWidth();
+                var ndcHeight = NDCHeight();
+                var ndcX = NDCLeft() + (ndcWidth / 2f);
+                var ndcY = NDCTop() - (ndcHeight / 2f); //Subtract to move down
+
+                return ToPixel(ndcX, ndcY);
+            }
+            set
+            {
+                var ndcVector = ToNDC(value);
+                var ndcHalfWidth = NDCWidth() / 2f;
+                var ndcHalfHeight = NDCHeight() / 2f;
+
+                var ndcLeft = ndcVector.X - ndcHalfWidth;
+                var ndcRight = ndcVector.X + ndcHalfWidth;
+
+                var ndcTop = ndcVector.Y + ndcHalfHeight;
+                var ndcBottom = ndcVector.Y - ndcHalfHeight;
+
+                // Update the vertices
+                SetLeftSide(ndcLeft);
+                SetRightSide(ndcRight);
+                SetTop(ndcTop);
+                SetBottom(ndcBottom);
+                UpdateData();
+            }
+        }
+
+        public int Width
+        {
+            get
+            {
+                var pixelLeft = NDCLeft().MapValue(-1f, 1f, 0f, SCREEN_WIDTH);
+                var pixelRight = NDCRight().MapValue(-1f, 1f, 0f, SCREEN_WIDTH);
+
+                return Math.Abs((int)pixelRight - (int)pixelLeft);
+            }
+            set
+            {
+                var ndcWidth = ((float)value).MapValue(0f, SCREEN_WIDTH, -1f, 1f);
+                var ndcHalfWidth = ndcWidth / 2f;
+
+                SetLeftSide(NDCLeft() - ndcHalfWidth);
+                SetRightSide(NDCRight() + ndcHalfWidth);
+                UpdateData();
+            }
+        }
+
+        public int Height
+        {
+            get
+            {
+                var pixelTop = NDCTop().MapValue(1f, -1f, 0f, SCREEN_HEIGHT);
+                var pixelBottom = NDCBottom().MapValue(1f, -1f, 0f, SCREEN_HEIGHT);
+
+                return Math.Abs((int)pixelBottom - (int)pixelTop);
+            }
+            set
+            {
+                var ndcHeight = ((float)value).MapValue(0f, SCREEN_HEIGHT, -1f, 1f);
+                var ndcHalfHeight = ndcHeight / 2f;
+
+                SetTop(NDCTop() - ndcHalfHeight);
+                SetBottom(NDCBottom() + ndcHalfHeight);
+                UpdateData();
+            }
+        }
+
+        public Color Color { get; set; } = Color.White;
 
         public void UpdateData()
         {
@@ -55,6 +136,8 @@ namespace OpenGLQuad
         {
             // Tell OpenGL which Shader Program we want to use
             _shader?.Use();
+
+            UpdateColorData(Color);
 
             // Bind the VAO so OpenGL knows to use it
             BindVAO();
@@ -121,6 +204,10 @@ namespace OpenGLQuad
             UnbindVBO();
             UnbindVAO();
             UnbindEBO();
+
+            _colorLocation = _gl.GetUniformLocation(_shader.Id, "u_color");
+
+            UpdateColorData(Color.White);
         }
 
         private void EnableVAO() => _gl.EnableVertexAttribArray(0);
@@ -147,6 +234,72 @@ namespace OpenGLQuad
             _gl.DeleteVertexArray(_vao);
             _gl.DeleteBuffer(_vbo);
             _gl.DeleteBuffer(_ebo);
+        }
+
+        private float NDCLeft() => _vertices[0];
+
+        private float NDCRight() => _vertices[6];
+
+        private float NDCTop() => _vertices[1];
+
+        private float NDCBottom() => _vertices[10];
+
+        private float NDCWidth() => NDCRight() - NDCLeft();
+
+        private float NDCHeight() => NDCBottom() - NDCTop();
+
+        private void SetLeftSide(float ndcValue)
+        {
+            _vertices[0] = ndcValue;
+            _vertices[3] = ndcValue;
+        }
+
+        private void SetRightSide(float ndcValue)
+        {
+            _vertices[6] = ndcValue;
+            _vertices[9] = ndcValue;
+        }
+
+        private void SetTop(float ndcValue)
+        {
+            _vertices[1] = ndcValue;
+            _vertices[7] = ndcValue;
+        }
+
+        private void SetBottom(float ndcValue)
+        {
+            _vertices[4] = ndcValue;
+            _vertices[10] = ndcValue;
+        }
+
+        private void UpdateColorData(Color clr)
+        {
+            _shader?.Use();
+            var red = ((float)clr.R).MapValue(0f, 255f, 0f, 1f);
+            var green = ((float)clr.G).MapValue(0f, 255f, 0f, 1f);
+            var blue = ((float)clr.B).MapValue(0f, 255f, 0f, 1f);
+            var alpha = ((float)clr.A).MapValue(0f, 255f, 0f, 1f);
+
+            _gl.Uniform4(_colorLocation, red, green, blue, alpha);
+        }
+
+        private Vector2 ToNDC(Vector2 pixelVector)
+        {
+            var ndcX = pixelVector.X.MapValue(0, SCREEN_WIDTH, -1f, 1f);
+            var ndcY = pixelVector.Y.MapValue(0, SCREEN_HEIGHT, 1f, -1f);
+            return new Vector2(ndcX, ndcY);
+        }
+
+        private Vector2 ToPixel(Vector2 ndcVector)
+        {
+            var pixelX = ndcVector.X.MapValue(-1f, 1f, 0, SCREEN_WIDTH);
+            var pixelY = ndcVector.Y.MapValue(1f, -1f, 0, SCREEN_HEIGHT);
+            return new Vector2(pixelX, pixelY);
+        }
+
+        private Vector2 ToPixel(float ndcX, float ndcY)
+        {
+            return ToPixel(new Vector2(ndcX, ndcY));
         }
     }
 }
