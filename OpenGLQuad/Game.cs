@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -14,34 +15,37 @@ using Silk.NET.Windowing;
     Up From Center Y (+ Value): ⬆
     Up From Center Y (+ Value): ⬇
 
-    Indice 0 (-0.5, 0.5)         Indice 2 (0.5, 0.5)
-                   \             /
-                    \           /
-                     |--------/|
-                     |       / |
-                     |      /  |
-                     |     /   |
-                     |    *----|-------Center (0, 0)
-                     |   /     |
-                     |  /      |
-                     | /       |
-                     |/________|
-                    /           \
-                   /             \
-    Indice 1 (-0.5, -0.5)         Indice 3 (0.5, -0.5)
+            Indice 0 (-1.0, 1.0)          Indice 2 & 3 (1.0, 1.0)
+                           \             /
+                            \           /
+                             |--------/|
+                             |       / |
+                             |      /  |
+                             |     /   |
+                             |    *----|-------Local Center (0, 0)
+                             |   /     |
+                             |  /      |
+                             | /       |
+                             |/________|
+                            /           \
+                           /             \
+       Indice 1 & 4 (-1.0, -1.0)          Indice 5 (1.0, -1.0)
  */
 
 namespace OpenGLQuad
 {
     public class Game
     {
-        // ReSharper disable once InconsistentNaming
+        private const uint BATCH_SIZE = 10u;
+        private const int SCREEN_WIDTH = 1600;
+        private const int SCREEN_HEIGHT = 1600;
         private static GL? GL;
         private static DebugProc? _debugCallback;
         private readonly IWindow _glWindow;
         private ShaderProgram? _shader;
-        private Quad _quadA;
-        private Quad _quadB;
+        private GPUBuffer _gpuBuffer;
+        private SpriteBatch _spriteBatch;
+        private List<Rectangle> _rects = new();
 
         /// <summary>
         /// Creates a new instance of <see cref="Game"/>.
@@ -56,41 +60,63 @@ namespace OpenGLQuad
 
             options.API = api;
             options.ShouldSwapAutomatically = false;
-            options.Size = new Vector2D<int>(800, 600);
+            options.Size = new Vector2D<int>(SCREEN_WIDTH, SCREEN_HEIGHT);
             options.Title = "LearnOpenGL with Silk.NET";
-            options.Position = new Vector2D<int>(400, 400);
             _glWindow = Window.Create(options);
 
             _glWindow.Load += OnLoad;
             _glWindow.Update += OnUpdate;
             _glWindow.Render += OnRender;
             _glWindow.Closing += OnClose;
-            _glWindow.Title = "Simple Quad";
+            _glWindow.Title = "Simple GPUBuffer";
         }
 
         /// <summary>
         /// Loads the game content.
         /// </summary>
-        private unsafe void OnLoad()
+        private void OnLoad()
         {
             // Must be called in the on load.  The OpenGL context must be created first
             // and that does not occur until the onload method has been invoked
             GL = GL.GetApi(_glWindow);
             SetupErrorCallback();
 
-            _shader = new ShaderProgram(GL, "shader", "shader");
+            _glWindow.Position = new Vector2D<int>(400, 300);
 
-            _quadA = new Quad(GL, _shader);
-            _quadA.Position = new Vector2(200, 200);
-            _quadA.Width = 100;
-            _quadA.Height = 100;
-            _quadA.Color = Color.Goldenrod;
+            _shader = new ShaderProgram(GL, "shader", "shader", BATCH_SIZE);
+            _gpuBuffer = new GPUBuffer(GL, _shader.Id, BATCH_SIZE);
 
-            _quadB = new Quad(GL, _shader);
-            _quadB.Position = new Vector2(265, 250);
-            _quadB.Width = 40;
-            _quadB.Height = 75;
-            _quadB.Color = Color.CornflowerBlue;
+            for (var i = 0; i < 1000; i++)
+            {
+                _rects.Add(GenerateRandomRect());
+            }
+
+            _spriteBatch = new SpriteBatch(GL, _gpuBuffer, _shader, BATCH_SIZE);
+        }
+
+        private Rectangle GenerateRandomRect()
+        {
+            var random = new Random();
+
+            var red = random.Next(0, 255);
+            var green = random.Next(0, 255);
+            var blue = random.Next(0, 255);
+
+            var width = (uint) random.Next(10, 150);
+            var height = (uint) random.Next(10, 150);
+            var halfWidth = width / 2.0f;
+            var halfHeight = height / 2.0f;
+
+            var x = random.Next((int)halfWidth, _glWindow.Size.X - (int)halfWidth);
+            var y = random.Next((int)halfHeight, _glWindow.Size.Y - (int)halfHeight);
+
+            return new Rectangle()
+            {
+                Position = new Vector2(x, y),
+                Width = (uint)random.Next(10, 150),
+                Height = (uint)random.Next(10, 150),
+                Color = Color.FromArgb(255, red, green, blue)
+            };
         }
 
         private void OnUpdate(double obj)
@@ -106,8 +132,14 @@ namespace OpenGLQuad
             // Clean the back buffer and assign the new color to it
             GL?.Clear(ClearBufferMask.ColorBufferBit);
 
-            _quadA.Render();
-             _quadB.Render();
+            _spriteBatch.Begin();
+
+            foreach (var rect in _rects)
+            {
+                _spriteBatch.RenderRectangle(rect);
+            }
+
+            _spriteBatch.End();
 
             // Swap the back buffer with the front buffer
             _glWindow.SwapBuffers();
@@ -115,7 +147,7 @@ namespace OpenGLQuad
 
         private void OnClose()
         {
-            _quadA.Dispose();
+            _gpuBuffer.Dispose();
             _shader?.Dispose();
         }
 

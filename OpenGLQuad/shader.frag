@@ -1,9 +1,9 @@
 #version 450 core
 
-uniform vec4 u_color;
-out vec4 out_color;
+in vec4 rect_color;
+out vec4 final_color;
 
 void main()
 {
-    out_color = u_color;
+    final_color = rect_color;
 }
