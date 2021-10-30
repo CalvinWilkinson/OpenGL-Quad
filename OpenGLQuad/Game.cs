@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Silk.NET.GLFW;
+using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
@@ -37,8 +38,8 @@ namespace OpenGLQuad
     public class Game
     {
         private const uint BATCH_SIZE = 10u;
-        private const int SCREEN_WIDTH = 1600;
-        private const int SCREEN_HEIGHT = 1600;
+        private const int SCREEN_WIDTH = 800;
+        private const int SCREEN_HEIGHT = 600;
         private static GL? GL;
         private static DebugProc? _debugCallback;
         private readonly IWindow _glWindow;
@@ -46,6 +47,9 @@ namespace OpenGLQuad
         private GPUBuffer _gpuBuffer;
         private SpriteBatch _spriteBatch;
         private List<Rectangle> _rects = new();
+        private Keyboard _keyboard;
+        private KeyboardState _prevKeyState;
+        private KeyboardState _curKeyState;
 
         /// <summary>
         /// Creates a new instance of <see cref="Game"/>.
@@ -68,6 +72,7 @@ namespace OpenGLQuad
             _glWindow.Update += OnUpdate;
             _glWindow.Render += OnRender;
             _glWindow.Closing += OnClose;
+            _glWindow.Resize += OnResize;
             _glWindow.Title = "Simple GPUBuffer";
         }
 
@@ -81,47 +86,46 @@ namespace OpenGLQuad
             GL = GL.GetApi(_glWindow);
             SetupErrorCallback();
 
+            _keyboard = new Keyboard();
             _glWindow.Position = new Vector2D<int>(400, 300);
 
             _shader = new ShaderProgram(GL, "shader", "shader", BATCH_SIZE);
             _gpuBuffer = new GPUBuffer(GL, _shader.Id, BATCH_SIZE);
 
-            for (var i = 0; i < 1000; i++)
+            _rects.Add(new Rectangle()
             {
+                Position = new Vector2(400, 300),
+                Width = 100,
+                Height = 50,
+                Color = Color.CornflowerBlue,
+            });
+
+            for (var i = 0; i < 4; i++)
+            {
+                break;
                 _rects.Add(GenerateRandomRect());
             }
 
             _spriteBatch = new SpriteBatch(GL, _gpuBuffer, _shader, BATCH_SIZE);
-        }
 
-        private Rectangle GenerateRandomRect()
-        {
-            var random = new Random();
-
-            var red = random.Next(0, 255);
-            var green = random.Next(0, 255);
-            var blue = random.Next(0, 255);
-
-            var width = (uint) random.Next(10, 150);
-            var height = (uint) random.Next(10, 150);
-            var halfWidth = width / 2.0f;
-            var halfHeight = height / 2.0f;
-
-            var x = random.Next((int)halfWidth, _glWindow.Size.X - (int)halfWidth);
-            var y = random.Next((int)halfHeight, _glWindow.Size.Y - (int)halfHeight);
-
-            return new Rectangle()
-            {
-                Position = new Vector2(x, y),
-                Width = (uint)random.Next(10, 150),
-                Height = (uint)random.Next(10, 150),
-                Color = Color.FromArgb(255, red, green, blue)
-            };
+            SetupKeyboard();
         }
 
         private void OnUpdate(double obj)
         {
+            _curKeyState = _keyboard.GetState();
 
+            if (_curKeyState.IsUp(Key.Down) && _prevKeyState.IsDown(Key.Down))
+            {
+                _glWindow.Size = new Vector2D<int>(_glWindow.Size.X, _glWindow.Size.Y + 50);
+            }
+
+            if (_curKeyState.IsUp(Key.Up) && _prevKeyState.IsDown(Key.Up))
+            {
+                _glWindow.Size = new Vector2D<int>(_glWindow.Size.X, _glWindow.Size.Y - 50);
+            }
+
+            _prevKeyState = _curKeyState;
         }
 
         private void OnRender(double obj)
@@ -155,6 +159,36 @@ namespace OpenGLQuad
         /// Runs the game.
         /// </summary>
         public void Run() => _glWindow.Run();
+
+        private void OnResize(Vector2D<int> obj)
+        {
+            GL.SetViewPortSize((uint) obj.X, (uint) obj.Y);
+        }
+
+        private Rectangle GenerateRandomRect()
+        {
+            var random = new Random();
+
+            var red = random.Next(0, 255);
+            var green = random.Next(0, 255);
+            var blue = random.Next(0, 255);
+
+            var width = (uint) random.Next(10, 150);
+            var height = (uint) random.Next(10, 150);
+            var halfWidth = width / 2.0f;
+            var halfHeight = height / 2.0f;
+
+            var x = random.Next((int)halfWidth, _glWindow.Size.X - (int)halfWidth);
+            var y = random.Next((int)halfHeight, _glWindow.Size.Y - (int)halfHeight);
+
+            return new Rectangle()
+            {
+                Position = new Vector2(x, y),
+                Width = (uint)random.Next(10, 150),
+                Height = (uint)random.Next(10, 150),
+                Color = Color.FromArgb(255, red, green, blue)
+            };
+        }
 
         /// <summary>
         /// Setup the callback to be invoked when OpenGL encounters an internal error.
@@ -194,6 +228,19 @@ namespace OpenGLQuad
             if (severity != GLEnum.DebugSeverityNotification)
             {
                 throw new Exception(errorMessage);
+            }
+        }
+
+        private void SetupKeyboard()
+        {
+            _keyboard = new Keyboard();
+
+            var input = _glWindow.CreateInput();
+
+            foreach (var keyboard in input.Keyboards)
+            {
+                keyboard.KeyDown += _keyboard.KeyDown;
+                keyboard.KeyUp += _keyboard.KeyUp;
             }
         }
     }

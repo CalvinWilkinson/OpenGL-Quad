@@ -94,5 +94,19 @@ namespace OpenGLQuad
 
             return new Vector2(data[2], data[3]);
         }
+
+        public static void SetViewPortSize(this GL gl, uint width, uint height)
+        {
+            /*
+             * [0] = X
+             * [1] = Y
+             * [3] = Width
+             * [4] = Height
+             */
+            var data = new int[4];
+
+            gl.GetInteger(GetPName.Viewport, data);
+            gl.Viewport(data[0], data[1], width, height);
+        }
     }
 }
